@@ -1,0 +1,212 @@
+---
+title: "temp"
+author: "Saumik Mallik"
+date: "2/11/2021"
+output: html_document
+---
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+library(Cairo)
+library(bootstrap)
+library(fitdistrplus)
+library(actuar)
+library(janitor)
+library(tidyquant)
+library(knitr)
+library(doParallel)
+
+all_cores <- parallel::detectCores(logical = FALSE)
+registerDoParallel(cores = all_cores)
+```
+
+### Load Data
+```{r, warning=FALSE}
+setwd("D:/THESIS!/###Baseline Noise Survey###/Official Data/##R ANALYSIS##")
+
+library(readxl)
+noise <- read_excel("final_data.xlsx")%>%
+  clean_names()
+
+######################################## INPUT INPUT INPUT #########################################
+noise_period1<- noise$x1_m_sun
+
+time_int<- 10  # time interval in seconds
+
+class_int<- 5
+####################################################################################################
+
+bin_start<- if (class_int==4 | class_int==8){
+  52} else if (class_int==5 | class_int==10){
+    50
+  }else(54)
+
+bin_end<- if (class_int==4 | class_int==8){
+  108} else if (class_int==5 | class_int==10){
+    110
+  }else(108)
+```
+**This sample analysis is conducted using noise data observed in front of Highcourt at Sunday evening, and by setting a time interval of 10 seconds and a class interval of 5.**
+
+
+\newpage
+### Leq
+```{r}
+floor_round <- function(x,base){
+        base*floor(x/base)
+}
+
+ceil_round <- function(x,base){
+        base*round(x/base) + 5
+}
+
+y1 <- as.matrix(as.numeric(na.exclude(noise_period1)))  
+df1 <- y1[seq(1, NROW(y1), time_int), ]   
+
+
+leq <- function(x, class_int){
+  #if(length(x) == 0){
+  #  print(NA)
+  #}else{ }
+  cuts<-cut(x, breaks= seq(bin_start, bin_end, by= class_int)) ##CLASS INTERVAL DEFAULT 10
+  counts<-c(t(table(cuts)))
+
+  labs <- levels(cuts)
+  lable_matrix<-cbind(lower = as.numeric( sub("\\((.+),.*", "\\1", labs) ),
+    upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", labs) ))
+
+  cut_frame<-data.frame(lable_matrix,counts) 
+
+  frame2= cut_frame%>% mutate(li= (cut_frame$lower+cut_frame$upper)/2)%>%
+    mutate(su=counts*(10^(li/10)))
+
+  summation= sum(frame2$su)
+  10*(log10(summation/60))
+  } 
+
+
+Leq1<- leq(df1, class_int)%>% round(1)
+Leq1
+
+
+```
+
+### L90, L50, L10
+```{r}
+# QUANTILES
+y1 <- as.matrix(as.numeric(na.exclude(noise_period1)))
+df1 <- y1[seq(1, NROW(y1), time_int), ]%>%
+  as_tibble()
+
+df1<- df1 %>% quantile(c(.1,.5,.9), na.rm = TRUE)
+
+tibble(L90= round(df1[1],1), L50= round(df1[2],1), L10= round(df1[3],1), Leq= round(Leq1, 1))
+```
+
+
+
+\newpage
+### Bootstraping
+
+```{r}
+# BOOTSTRAP Leq
+
+round_df <- function(df, digits=1) {
+  nums <- vapply(df, is.numeric, FUN.VALUE = logical(1))
+  
+  df[,nums] <- round(df[,nums], digits = digits)
+  
+  (df)
+}
+
+
+leq1 <- function(x, class_int){
+  cuts<-cut(x, breaks=seq(bin_start, bin_end, by=class_int)) ##CLASS INTERVAL DEFAULT 10
+  counts<-c(t(table(cuts)))
+
+  labs <- levels(cuts)
+  lable_matrix<-cbind(lower = as.numeric( sub("\\((.+),.*", "\\1", labs) ),
+    upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", labs) ))
+
+  cut_frame<-data.frame(lable_matrix,counts) 
+
+  frame2= cut_frame%>% mutate(li= (cut_frame$lower+cut_frame$upper)/2)%>%
+    mutate(su=counts*(10^(li/10)))
+
+  summation= sum(frame2$su)
+  10*(log10(summation/60))
+    } 
+
+y1=as.matrix(as.numeric(na.exclude(noise_period1))) 
+df1= y1[seq(1, NROW(y1), time_int), ]
+
+#leq(df, class_int)
+
+boot_data1= bootstrap(df1, 1000, leq1, class_int=class_int)
+
+#x <- boot_data$thetastar
+#k = ifelse((x > conf_bounds[1,1] & x < conf_bounds[1,2]), yes =  "darkorange", 
+#  no = "red" )
+
+#cols <- c('red', "#8DD3C7")  
+#k <- cols[findInterval(h$mids, quantile(x), rightmost.closed=T, all.inside=F) + 1]
+# plot the histogram with the colours
+#plot(h, col=k)
+
+#h<- hist(boot_data$thetastar, main="Histogram of Bootstraped Leq", xlab = "Bootstraped Leq (dBA)", col= "#386cb0") 
+#text(h$mids,h$counts,labels=h$counts, adj=c(0.5, -0.5))
+
+conf_bounds1<- boot_data1$thetastar%>% 
+  quantile(c(.05,.95))%>%
+  t()%>%
+  as_tibble()%>%
+  round_df()%>%
+  rename("Lower confidence bound (dBA)"="5%", "Higher confidence bound (dBA)"="95%")
+
+
+
+# Bootstrap Histogram
+boot_hist_sm1<- ggplot(data= data.frame(boot_data1$thetastar), aes(boot_data1$thetastar))+
+  geom_histogram(fill= "#386cb0", alpha=0.60, color= "#386cb0", bins= 20)+
+  labs(title = "Highcourt, Sunday Morning", subtitle="90% confidence interval",x = "Bootstrap Leq (dBA)", y="frequency")+ #Load the theme from ggplot_thesis script
+  scale_colour_Publication()+ theme_Publication()+
+  geom_vline(aes(xintercept=conf_bounds1$`Lower confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_vline(aes(xintercept=conf_bounds1$`Higher confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_vline(aes(xintercept= Leq1, color = "Observed Leq of the dataset    "), size= 1.0, linetype= "dashed")+
+  scale_colour_manual(#labels = c("Confidence Intervals   ", "Actual Leq of the dataset    "),
+    values = c("Confidence Intervals   "="red", "Observed Leq of the dataset    "="blue"), name= "", guide= "legend")+
+  scale_x_continuous(breaks = c(conf_bounds1$`Lower confidence bound (dBA)`, 75, Leq1, 80, conf_bounds1$`Higher confidence bound (dBA)`)) +
+  theme(axis.text.x = element_text(color = c("red", "black", "blue", "black","red"), face = c("bold", "plain", "bold", "plain", "bold")),
+        axis.ticks.x = element_line(color = c("red", "black", "blue", "black","red"),
+                          size = c(1,.5,1,.5,1)))+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+
+
+# Lineplot of 1000 Leq values 900:250
+boot_data1$idu <- 1:1000
+boot_plot_sm1<- ggplot()+
+  scale_colour_Publication()+ theme_Publication()+
+  geom_line(data= data.frame(boot_data1$thetastar), aes(x=boot_data1$idu ,y=boot_data1$thetastar),lwd=0.02, alpha= 0.7)+
+  geom_hline(aes(yintercept=conf_bounds1$`Lower confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_hline(aes(yintercept=conf_bounds1$`Higher confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_hline(aes(yintercept= Leq1, color = "Observed Leq of the dataset    "), size= 1.0, linetype= "dashed")+
+  labs(title = "Highcourt, Sunday Morning", x = "Subsample Number", y="Leq (dBA)")+
+  scale_colour_manual(#labels = c("Confidence Intervals   ", "Actual Leq of the dataset    "),
+    values = c("Observed Leq of the dataset    "="blue", "Confidence Intervals   "="red"), name= "", guide= "legend")+
+  scale_y_continuous(breaks = c(conf_bounds1$`Lower confidence bound (dBA)`, 75, Leq1, 80, conf_bounds1$`Higher confidence bound (dBA)`)) +
+  theme(axis.text.y = element_text(color = c("red", "black", "blue", "black","red"), face = c("bold", "plain", "bold", "plain", "bold")),
+        axis.ticks.y = element_line(color = c("red", "black", "blue", "black","red"),
+                          size = c(1,.5,1,.5,1)))+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+plot(boot_hist_sm1)
+```

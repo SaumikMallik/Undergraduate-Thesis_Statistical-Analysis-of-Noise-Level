@@ -1,0 +1,358 @@
+---
+title: "thesis_ggplots"
+author: "Saumik Mallik"
+date: "1/26/2021"
+output: html_document
+---
+
+```{r}
+
+# CUSTOM THEME 'Publication'
+theme_Publication <- function(base_size=10, base_family="Merriweather") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "plain",size = rel(0.95)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.3, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               plot.subtitle = element_text(hjust = 0.5),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+scale_fill_Publication <- function(...){
+      library(scales)
+      discrete_scale("fill","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+
+}
+
+scale_colour_Publication <- function(...){
+      library(scales)
+      discrete_scale("colour","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+
+}
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(extrafont)
+library(ggpubr)
+loadfonts(device = "win")
+#font_import()
+library(showtext) # https://stackoverflow.com/questions/34522732/changing-fonts-in-ggplot2
+
+# Choose any font from google fonts
+font_add_google("Lora", "Lora")
+font_add_google("Merriweather", "Merriweather")
+
+showtext_auto()
+#font_add("Palatino", "D:\\FONTS\\palatino\\pala.ttf")
+```
+
+
+```{r}
+setwd("D:/THESIS!/###Baseline Noise Survey###/Official Data/##R ANALYSIS##")
+
+data <- read_excel("final_data.xlsx")%>% clean_names()
+data <- data[,colSums(is.na(data))<nrow(data)]%>% na.exclude()
+
+```
+
+```{r}
+period<- data[[51]]
+
+br <- try( fitdist(as.numeric(na.exclude(period)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+#if("try-error" %in% class(br)) {br<- fitdist(as.numeric(na.exclude(data[[x]])), "burr", start = list(shape1 = 0.4, shape2 = 1, rate = 3), lower=c(0,0))}
+gm<- fitdist(as.numeric(na.exclude(period)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(period)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(period)), "lnorm")
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# QQ Plot
+
+###########################################################################################
+# 1st plot
+noise<- data.frame(data[[1]])
+p1<- ggplot(data = data.frame(data[[1]]), aes(sample = data[[1]], color = variable))+
+  stat_qq(distribution = qgamma,dparams = as.list(gm$estimate), size=2, shape=16, alpha=1, aes(color = "Gamma"))+
+  stat_qq(distribution = qlnorm,dparams = as.list(ln$estimate), size=2, shape=16, alpha=0.8, aes(color = "Lognormal"))+
+  stat_qq(distribution = qllogis, dparams = as.list(ll$estimate),size=2, shape=16, alpha=0.7, aes(color = "Loglogistic"))+
+  stat_qq(distribution = qburr,dparams = as.list(br$estimate), size=2, shape=16, alpha=0.6, aes(color = "Burr"))+
+  geom_abline(slope = 1, color = "black",lwd=0.75, linetype = "dashed")+
+  labs(title = "01 at Sunday Morning", x = "Theoritical quantiles (dBA)", y = "Empirical quantiles (dBA)")+
+  xlim(57,100)+ ylim(60,100)+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+###########################################################################################
+# 2nd plot
+p2<- ggplot(data = data.frame(data[[11]]), aes(sample = data[[11]], color = variable))+
+  stat_qq(distribution = qgamma,dparams = as.list(gm$estimate), size=2, shape=16, alpha=1, aes(color = "Gamma"))+
+  stat_qq(distribution = qlnorm,dparams = as.list(ln$estimate), size=2, shape=16, alpha=0.8, aes(color = "Lognormal"))+
+  stat_qq(distribution = qllogis, dparams = as.list(ll$estimate),size=2, shape=16, alpha=0.7, aes(color = "Loglogistic"))+
+  stat_qq(distribution = qburr,dparams = as.list(br$estimate), size=2, shape=16, alpha=0.6, aes(color = "Burr"))+
+  geom_abline(slope = 1, color = "black",lwd=0.75, linetype = "dashed")+
+  labs(title = "11 at Sunday Morning", x = "Theoritical quantiles (dBA)", y = "Empirical quantiles (dBA)")+
+  xlim(57,100)+ ylim(60,100)+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+###########################################################################################
+# 3rd plot
+p3<- ggplot(data = data.frame(data[[91]]), aes(sample = data[[91]], color = variable))+
+  stat_qq(distribution = qgamma,dparams = as.list(gm$estimate), size=2, shape=16, alpha=1, aes(color = "Gamma"))+
+  stat_qq(distribution = qlnorm,dparams = as.list(ln$estimate), size=2, shape=16, alpha=0.8, aes(color = "Lognormal"))+
+  stat_qq(distribution = qllogis, dparams = as.list(ll$estimate),size=2, shape=16, alpha=0.7, aes(color = "Loglogistic"))+
+  stat_qq(distribution = qburr,dparams = as.list(br$estimate), size=2, shape=16, alpha=0.6, aes(color = "Burr"))+
+  geom_abline(slope = 1, color = "black",lwd=0.75, linetype = "dashed")+
+  labs(title = "Highcourt, Saturday Evening", x = "Theoritical quantiles (dBA)", y = "Empirical quantiles (dBA)")+
+  xlim(57,100)+ ylim(60,100)+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions    ", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+###########################################################################################
+# Grid arrange
+figure<- ggarrange(p1, p2, p3, ncol=3, nrow=1, common.legend = TRUE, legend="bottom" )
+figure<- annotate_figure(figure,
+               top = text_grob("Q-Q plots comparison between distributions", color = "Black", face = "bold", size = 13, family = "Lora"))
+
+figure
+# EXPORT from Plots panel
+#ggsave(figure, file = "myplot.png", dpi = 400)
+```
+
+```{r}
+###########################################################################################
+pdf_data<- data[[1]]
+br <- try( fitdist(as.numeric(na.exclude(pdf_data)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+gm<- fitdist(as.numeric(na.exclude(pdf_data)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(pdf_data)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(pdf_data)), "lnorm")
+p1<- ggplot(data = data.frame(pdf_data), aes(sample = pdf_data, color = variable))+
+  geom_histogram(aes(x=pdf_data, y=..density..), color="black",alpha=.1, binwidth = 1)+
+  stat_function(fun = dlnorm, args = list(meanlog=as.numeric(ln$estimate[1]),
+                                          sdlog=as.numeric(ln$estimate[2])),
+                aes(color="Lognormal"),size=1.2) +
+  stat_function(fun = dllogis, args = list(shape=as.numeric(ll$estimate[1]),
+                                          scale=as.numeric(ll$estimate[2])),
+                aes(color="Loglogistic"),size=1.2) +
+  stat_function(fun = dgamma, args = list(shape=as.numeric(gm$estimate[1]),
+                                           rate=as.numeric(gm$estimate[2])),
+                aes(color="Gamma"),size=1.2)+
+  stat_function(fun = dburr, args = list(shape1=as.numeric(br$estimate[1]),
+                                          shape2=as.numeric(br$estimate[2]),
+                                          rate=as.numeric(br$estimate[3])),
+                aes(color="Burr"),size=1.2)+
+  labs(title = "01 at Sunday Morning", x = "Noise Level (dBA)", y = "Density")+
+  scale_color_identity(name= "",
+                       labels= c("Loglogistic", "Weibull","Gamma","Lognormal"),
+                       guide= "legend")+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions    ", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+###########################################################################################
+pdf_data<- data[[51]]
+br <- try( fitdist(as.numeric(na.exclude(pdf_data)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+gm<- fitdist(as.numeric(na.exclude(pdf_data)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(pdf_data)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(pdf_data)), "lnorm")
+p2<- ggplot(data = data.frame(pdf_data), aes(sample = pdf_data, color = variable))+
+  geom_histogram(aes(x=pdf_data, y=..density..), color="black",alpha=.1, binwidth = 1)+
+  stat_function(fun = dlnorm, args = list(meanlog=as.numeric(ln$estimate[1]),
+                                          sdlog=as.numeric(ln$estimate[2])),
+                aes(color="Lognormal"),size=1.2) +
+  stat_function(fun = dllogis, args = list(shape=as.numeric(ll$estimate[1]),
+                                          scale=as.numeric(ll$estimate[2])),
+                aes(color="Loglogistic"),size=1.2) +
+  stat_function(fun = dgamma, args = list(shape=as.numeric(gm$estimate[1]),
+                                           rate=as.numeric(gm$estimate[2])),
+                aes(color="Gamma"),size=1.2)+
+  stat_function(fun = dburr, args = list(shape1=as.numeric(br$estimate[1]),
+                                          shape2=as.numeric(br$estimate[2]),
+                                          rate=as.numeric(br$estimate[3])),
+                aes(color="Burr"),size=1.2)+
+  labs(title = "01 at Sunday Evening", x = "Noise Level (dBA)", y = "Density")+
+  scale_color_identity(name= "",
+                       labels= c("Loglogistic", "Weibull","Gamma","Lognormal"),
+                       guide= "legend")+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions    ", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+###########################################################################################
+pdf_data<- data[[41]]
+br <- try( fitdist(as.numeric(na.exclude(pdf_data)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+gm<- fitdist(as.numeric(na.exclude(pdf_data)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(pdf_data)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(pdf_data)), "lnorm")
+p3<- ggplot(data = data.frame(pdf_data), aes(sample = pdf_data, color = variable))+
+  geom_histogram(aes(x=pdf_data, y=..density..), color="black",alpha=.1, binwidth = 1)+
+  stat_function(fun = dlnorm, args = list(meanlog=as.numeric(ln$estimate[1]),
+                                          sdlog=as.numeric(ln$estimate[2])),
+                aes(color="Lognormal"),size=1.2) +
+  stat_function(fun = dllogis, args = list(shape=as.numeric(ll$estimate[1]),
+                                          scale=as.numeric(ll$estimate[2])),
+                aes(color="Loglogistic"),size=1.2) +
+  stat_function(fun = dgamma, args = list(shape=as.numeric(gm$estimate[1]),
+                                           rate=as.numeric(gm$estimate[2])),
+                aes(color="Gamma"),size=1.2)+
+  stat_function(fun = dburr, args = list(shape1=as.numeric(br$estimate[1]),
+                                          shape2=as.numeric(br$estimate[2]),
+                                          rate=as.numeric(br$estimate[3])),
+                aes(color="Burr"),size=1.2)+
+  labs(title = "01 at Saturday Morning", x = "Noise Level (dBA)", y = "Density")+
+  scale_color_identity(name= "",
+                       labels= c("Loglogistic", "Weibull","Gamma","Lognormal"),
+                       guide= "legend")+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions    ", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+###########################################################################################
+pdf_data<- data[[91]]
+br <- try( fitdist(as.numeric(na.exclude(pdf_data)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+gm<- fitdist(as.numeric(na.exclude(pdf_data)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(pdf_data)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(pdf_data)), "lnorm")
+p4<- ggplot(data = data.frame(pdf_data), aes(sample = pdf_data, color = variable))+
+  geom_histogram(aes(x=pdf_data, y=..density..), color="black",alpha=.1, binwidth = 1)+
+  stat_function(fun = dlnorm, args = list(meanlog=as.numeric(ln$estimate[1]),
+                                          sdlog=as.numeric(ln$estimate[2])),
+                aes(color="Lognormal"),size=1.2) +
+  stat_function(fun = dllogis, args = list(shape=as.numeric(ll$estimate[1]),
+                                          scale=as.numeric(ll$estimate[2])),
+                aes(color="Loglogistic"),size=1.2) +
+  stat_function(fun = dgamma, args = list(shape=as.numeric(gm$estimate[1]),
+                                           rate=as.numeric(gm$estimate[2])),
+                aes(color="Gamma"),size=1.2)+
+  stat_function(fun = dburr, args = list(shape1=as.numeric(br$estimate[1]),
+                                          shape2=as.numeric(br$estimate[2]),
+                                          rate=as.numeric(br$estimate[3])),
+                aes(color="Burr"),size=1.2)+
+  labs(title = "Highcourt, Saturday Evening", x = "Noise Level (dBA)", y = "Density")+
+  scale_color_identity(name= "",
+                       labels= c("Loglogistic", "Weibull","Gamma","Lognormal"),
+                       guide= "legend")+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("Burr", "Gamma","Loglogistic","Lognormal"), values = c("Lognormal"="#fdb462", "Loglogistic"="#386cb0", "Gamma"="#7fc97f", "Burr"="#ef3b2c"), name= "Distributions    ", guide= "legend")+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+###########################################################################################
+# Grid arrange
+figure<- ggarrange(p1, p2, p3, p4, ncol=2, nrow=2, common.legend = TRUE, legend="bottom" )
+figure<- annotate_figure(figure,
+               top = text_grob("PDF plots comparison between distributions", color = "Black", face = "bold", size = 13, family = "Lora"))
+
+figure
+# EXPORT from Plots panel
+#ggsave(figure, file = "myplot.png", dpi = 400)
+```
+
+
+```{r}
+###########################################################################################
+cdf_80_y<- 0.92
+cdf_80_x<- 80
+cdf_data<- data[[1]]
+###########################################################################################
+
+br <- try( fitdist(as.numeric(na.exclude(cdf_data)), "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3),lower=c(0,0)) )
+gm<- fitdist(as.numeric(na.exclude(cdf_data)), "gamma")
+ll<- fitdist(as.numeric(na.exclude(cdf_data)), "llogis", start = list(shape = 1, scale = 500))
+ln<- fitdist(as.numeric(na.exclude(cdf_data)), "lnorm")
+###########################################################################################
+
+cdf_plot<- ggplot(data = data.frame(cdf_data), aes(sample = cdf_data, color = variable))+
+  #stat_function(fun = plnorm, args = list(meanlog=as.numeric(ln$estimate[1]),
+   #                                       sdlog=as.numeric(ln$estimate[2])),
+    #            aes(color="Lognormal"),size=1.2) +
+  #stat_function(fun = pllogis, args = list(shape=as.numeric(ll$estimate[1]),
+   #                                       scale=as.numeric(ll$estimate[2])),
+    #            aes(color="Loglogistic"),size=1.2) +
+  #stat_function(fun = pgamma, args = list(shape=as.numeric(gm$estimate[1]),
+   #                                        rate=as.numeric(gm$estimate[2])),
+    #            aes(color="Gamma"),size=1.2)+
+  stat_function(fun = pburr, args = list(shape1=as.numeric(br$estimate[1]),
+                                          shape2=as.numeric(br$estimate[2]),
+                                          rate=as.numeric(br$estimate[3])),
+                aes(color="Burr"),size=1.2)+
+  stat_ecdf(aes(x=cdf_data, color="Actual data"), geom = "line", size=1.5, linetype= "dotted")+
+  labs(title = "Fitted empirical and theoretical CDF plots",subtitle="Highcourt, Sunday Morning", x = "Noise Level (dBA)", y = "Cumulitive Density")+
+  guides(alpha= FALSE)+
+  scale_colour_Publication()+ theme_Publication()+
+  scale_colour_manual(labels = c("CDF of Observed data (empirical)    ","CDF of fitted Burr Distribution (theoretical)"), values = c("Burr"="#ef3b2c", "Actual data"= "Black"), name= "", guide= "legend")+
+  annotate("segment", x = cdf_80_x, y = 0, xend = cdf_80_x, yend = cdf_80_y,
+            colour = "blue", linetype = "dashed")+
+  annotate("segment", x = cdf_80_x, y = cdf_80_y, xend = 57, yend = cdf_80_y,
+            colour = "blue", linetype = "dashed")+
+  xlim(57,100)+
+  #annotate("text", x = 57, y = 0.88, label = "0.92")+
+  #annotation_custom(textGrob("0.92", gp = gpar(col = "red")), xmin=53, xmax=59,ymin=0.92, ymax=0.92)+
+  scale_y_continuous(breaks = c(0.00,0.25,0.50,0.75,cdf_80_y,1.00), labels = c("0.00","0.25","0.50","0.75","0.92","1.00")) +
+  theme(axis.text.y = element_text(color = c("black", "black", "black", "black","blue", "black"), face = c("plain", "plain", "plain", "plain", "bold", "plain")),
+        axis.ticks.y = element_line(color = c("black", "black", "black", "black","blue", "black"),
+                          size = c(.5,.5,.5,.5,1,.5)))+
+  theme(legend.text=element_text(size=rel(0.9)))
+
+cdf_plot
+# 1, 11, 21, 41, 46, 
+```
+
+```{r}
+# Exceedance & Return Period calculation
+exceedance =(1-cdf_80_y)* 600  # Y-axis value cdf_80_y from CDF curve corresponding to the benchmark
+return_period = round(600/exceedance,2)
+tibble(exceedance=exceedance, return_period=return_period)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

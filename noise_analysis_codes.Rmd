@@ -1,0 +1,395 @@
+---
+title: "Noise Analysis of Highcourt to TSC route"
+author: "Saumik Mallik, Ankur Debnath, Fariza Rahman"
+date: "8/23/2020"
+output: html_document
+---
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+library(Cairo)
+library(bootstrap)
+library(fitdistrplus)
+library(actuar)
+library(janitor)
+library(tidyquant)
+library(knitr)
+library(doParallel)
+
+all_cores <- parallel::detectCores(logical = FALSE)
+registerDoParallel(cores = all_cores)
+```
+
+### Load Data
+```{r, warning=FALSE}
+setwd("D:/THESIS!/###Baseline Noise Survey###/Official Data/##R ANALYSIS##")
+
+library(readxl)
+noise <- read_excel("final_data.xlsx")%>%
+  clean_names()
+
+######################################## INPUT INPUT INPUT #########################################
+noise_period<- noise$x1_e_sun
+
+time_int<- 10  # time interval in seconds
+
+class_int<- 5
+####################################################################################################
+
+bin_start<- if (class_int==4 | class_int==8){
+  52} else if (class_int==5 | class_int==10){
+    50
+  }else(54)
+
+bin_end<- if (class_int==4 | class_int==8){
+  108} else if (class_int==5 | class_int==10){
+    110
+  }else(108)
+```
+**This sample analysis is conducted using noise data observed in front of Highcourt at Sunday evening, and by setting a time interval of 10 seconds and a class interval of 5.**
+
+
+\newpage
+### Leq
+```{r}
+floor_round <- function(x,base){
+        base*floor(x/base)
+}
+
+ceil_round <- function(x,base){
+        base*round(x/base) + 5
+}
+
+y <- as.matrix(as.numeric(na.exclude(noise_period)))  
+df <- y[seq(1, NROW(y), time_int), ]   
+
+
+leq <- function(x, class_int){
+  #if(length(x) == 0){
+  #  print(NA)
+  #}else{ }
+  cuts<-cut(x, breaks= seq(bin_start, bin_end, by= class_int)) ##CLASS INTERVAL DEFAULT 10
+  counts<-c(t(table(cuts)))
+
+  labs <- levels(cuts)
+  lable_matrix<-cbind(lower = as.numeric( sub("\\((.+),.*", "\\1", labs) ),
+    upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", labs) ))
+
+  cut_frame<-data.frame(lable_matrix,counts) 
+
+  frame2= cut_frame%>% mutate(li= (cut_frame$lower+cut_frame$upper)/2)%>%
+    mutate(su=counts*(10^(li/10)))
+
+  summation= sum(frame2$su)
+  10*(log10(summation/60))
+  } 
+
+
+Leq<- leq(df, class_int)%>% round(1)
+Leq
+
+
+```
+
+### L90, L50, L10
+```{r}
+# QUANTILES
+y <- as.matrix(as.numeric(na.exclude(noise_period)))
+df <- y[seq(1, NROW(y), time_int), ]%>%
+  as_tibble()
+
+df<- df %>% quantile(c(.1,.5,.9), na.rm = TRUE)
+
+tibble(L90= round(df[1],1), L50= round(df[2],1), L10= round(df[3],1), Leq= round(Leq, 1))
+```
+
+
+\newpage
+### Comparative Density Plots
+
+```{r, message=FALSE, warning=FALSE}
+# MULTIPLE DENSITY WITHIN ONE GRAPH. PKG RESHAPE2, ggplot2, CAIRO
+
+periods<- noise%>%
+  dplyr::select("x1_e_thu", "x1_e_fri", "x1_e_sat", "x1_e_sun")%>%
+  melt()
+
+#cdat <- ddply(periods, "variable", summarise, db_mean=mean(value))
+#cdat<- tapply(periods$value, periods$variable, mean)
+
+myplot<-
+  periods%>%
+  ggplot(aes(x= value, colour= variable, fill= variable))+
+  geom_density(alpha=0.25, size= 1.05)+
+  scale_x_continuous("dBA", breaks = seq(50,100,5),limits =c(50,100))+
+  scale_y_continuous("Density")+
+  ggtitle("Comparative density plots of noise levels observed")+
+  xlab("Noise level (dBA)")+
+  scale_colour_Publication()+ theme_Publication() +
+  scale_fill_tableau(labels = c("Thursday Evening    ", "Friday Evening    ", "Saturday Evening    ", "Sunday Evening    "))+
+  scale_color_tableau(labels = c("Thursday Evening    ", "Friday Evening    ", "Saturday Evening    ", "Sunday Evening    "))+ 
+  theme(legend.title=element_blank())+
+  theme(plot.title = element_text(hjust = 0.5))+
+  xlim(c(60,100))
+
+CairoWin()
+myplot
+#ggsave(myplot, file = "myplot.png", dpi = 900)
+```
+
+**In this comparative density plot two workdays (Thursday and Sunday) and two weekend days (Friday and Saturday) are compared to get a visual idea about the differences within traffic noise in a typical workday and holiday evening in the Highcourt area.**
+
+
+\newpage
+### Bootstraping
+
+```{r}
+# BOOTSTRAP Leq
+
+round_df <- function(df, digits=1) {
+  nums <- vapply(df, is.numeric, FUN.VALUE = logical(1))
+  
+  df[,nums] <- round(df[,nums], digits = digits)
+  
+  (df)
+}
+
+
+leq <- function(x, class_int){
+  cuts<-cut(x, breaks=seq(bin_start, bin_end, by=class_int)) ##CLASS INTERVAL DEFAULT 10
+  counts<-c(t(table(cuts)))
+
+  labs <- levels(cuts)
+  lable_matrix<-cbind(lower = as.numeric( sub("\\((.+),.*", "\\1", labs) ),
+    upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", labs) ))
+
+  cut_frame<-data.frame(lable_matrix,counts) 
+
+  frame2= cut_frame%>% mutate(li= (cut_frame$lower+cut_frame$upper)/2)%>%
+    mutate(su=counts*(10^(li/10)))
+
+  summation= sum(frame2$su)
+  10*(log10(summation/60))
+    } 
+
+y=as.matrix(as.numeric(na.exclude(noise_period))) 
+df= y[seq(1, NROW(y), time_int), ]
+
+#leq(df, class_int)
+
+boot_data= bootstrap(df, 1000, leq, class_int=class_int)
+
+#x <- boot_data$thetastar
+#k = ifelse((x > conf_bounds[1,1] & x < conf_bounds[1,2]), yes =  "darkorange", 
+#  no = "red" )
+
+#cols <- c('red', "#8DD3C7")  
+#k <- cols[findInterval(h$mids, quantile(x), rightmost.closed=T, all.inside=F) + 1]
+# plot the histogram with the colours
+#plot(h, col=k)
+
+#h<- hist(boot_data$thetastar, main="Histogram of Bootstraped Leq", xlab = "Bootstraped Leq (dBA)", col= "#386cb0") 
+#text(h$mids,h$counts,labels=h$counts, adj=c(0.5, -0.5))
+
+conf_bounds<- boot_data$thetastar%>% 
+  quantile(c(.05,.95))%>%
+  t()%>%
+  as_tibble()%>%
+  round_df()%>%
+  rename("Lower confidence bound (dBA)"="5%", "Higher confidence bound (dBA)"="95%")
+conf_bounds
+
+
+# Bootstrap Histogram
+boot_hist_se1<- ggplot(data= data.frame(boot_data$thetastar), aes(boot_data$thetastar))+
+  geom_histogram(fill= "#386cb0", alpha=0.60, color= "#386cb0", bins= 20)+
+  labs(title = "Highcourt, Sunday Evening", subtitle="90% confidence interval",x = "Bootstrap Leq (dBA)", y="frequency")+ #Load the theme from ggplot_thesis script
+  scale_colour_Publication()+ theme_Publication()+
+  geom_vline(aes(xintercept=conf_bounds$`Lower confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_vline(aes(xintercept=conf_bounds$`Higher confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_vline(aes(xintercept= Leq, color = "Observed Leq of the dataset    "), size= 1.0, linetype= "dashed")+
+  scale_colour_manual(#labels = c("Confidence Intervals   ", "Actual Leq of the dataset    "),
+    values = c("Confidence Intervals   "="red", "Observed Leq of the dataset    "="blue"), name= "", guide= "legend")+
+  scale_x_continuous(breaks = c(conf_bounds$`Lower confidence bound (dBA)`, 73, Leq, 74, conf_bounds$`Higher confidence bound (dBA)`)) +
+  theme(axis.text.x = element_text(color = c("red", "black", "blue", "black","red"), face = c("bold", "plain", "bold", "plain", "bold")),
+        axis.ticks.x = element_line(color = c("red", "black", "blue", "black","red"),
+                          size = c(1,.5,1,.5,1)))+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+
+
+# Lineplot of 1000 Leq values 900:250
+boot_data$idu <- 1:1000
+boot_plot_se1<- ggplot()+
+  scale_colour_Publication()+ theme_Publication()+
+  geom_line(data= data.frame(boot_data$thetastar), aes(x=boot_data$idu ,y=boot_data$thetastar),lwd=0.02, alpha= 0.7)+
+  geom_hline(aes(yintercept=conf_bounds$`Lower confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_hline(aes(yintercept=conf_bounds$`Higher confidence bound (dBA)`, 
+                color = "Confidence Intervals   "), linetype="dashed", size= 1.0)+
+  geom_hline(aes(yintercept= Leq, color = "Observed Leq of the dataset    "), size= 1.0, linetype= "dashed")+
+  labs(title = "Highcourt, Sunday Evening", x = "Subsample Number", y="Leq (dBA)")+
+  scale_colour_manual(#labels = c("Confidence Intervals   ", "Actual Leq of the dataset    "),
+    values = c("Observed Leq of the dataset    "="blue", "Confidence Intervals   "="red"), name= "", guide= "legend")+
+  scale_y_continuous(breaks = c(conf_bounds$`Lower confidence bound (dBA)`, 73, Leq, 74, conf_bounds$`Higher confidence bound (dBA)`)) +
+  theme(axis.text.y = element_text(color = c("red", "black", "blue", "black","red"), face = c("bold", "plain", "bold", "plain", "bold")),
+        axis.ticks.y = element_line(color = c("red", "black", "blue", "black","red"),
+                          size = c(1,.5,1,.5,1)))+
+  theme(plot.title = element_text(face = "bold",
+                                         size = rel(1), hjust = 0.5))
+
+```
+
+
+
+
+
+```{r}
+# Grid arrange
+library(ggpubr)
+figure<- ggarrange(boot_hist_sm1, boot_hist_se1, ncol=2, nrow=1, common.legend = TRUE, legend="bottom" )+
+ theme(legend.text=element_text(size=rel(1.2)))
+#figure<- annotate_figure(figure,
+            #   top = text_grob("Bootstrap Histogram of Leq", color = "Black", face = "bold", size = 13, family = "Merriweather"))
+
+figure
+
+figure1<- ggarrange(boot_plot_sm1, boot_plot_se1, ncol=1, nrow=2, common.legend = TRUE, legend="bottom" )
+figure1<- annotate_figure(figure1,
+               top = text_grob("Bootstrap Leq", color = "Black", face = "bold", size = 13, family = "Merriweather"))
+
+figure1
+```
+
+
+**Our analysed confindence interval implies that the noise level observed at the particuler place can flactuate between 73.4 dBA to 75.8 dBA in a typical day.**
+
+
+\newpage
+### Distribution Fit
+```{r, warning=FALSE, message=FALSE}
+noise_period<- noise$x11_m_sun
+x <- as.numeric(na.exclude(noise_period))
+
+#plotdist(x ,histo = TRUE, demp = TRUE)   # Check the histogram with distribution curve
+#descdist(x, boot=1000)   # Cullen & Frey graph
+
+weibull<- fitdist(x, "weibull")
+lognorm<- fitdist(x, "lnorm")
+gamma<- fitdist(x, "gamma")
+burr<- fitdist(x, "burr", start = list(shape1 = 0.3, shape2 = 1, rate = 3)) # shape= 0.3 otherwise
+nllogis<- fitdist(x, "llogis", start = list(shape = 1, scale=500))
+#pareto<- fitdist(x, "pareto", start = list(shape = 1, scale = 500))
+
+summary(burr)
+summary(gamma)
+summary(lognorm)
+summary(nllogis)
+summary(weibull)
+plot(burr)
+
+gofstat(list(weibull, lognorm, gamma, burr, nllogis),  fitnames = c("weibull", "lognormal", "gamma","burr","llogis"))
+ppcomp(list(lognorm,burr, nllogis), legendtext = c("lognormal","burr","llogis")) #cdf, qq, pp
+```
+
+**Both the Goodness-of-fit statitics and criterion, and the comparative p-p plot implies that the Burr distribution is the best choice for fitting in the noise data. We will now analyze this distribution further to finalize our decision. **
+
+
+\newpage
+### Distribution Details
+```{r}
+dist<- burr
+
+summary(dist)
+plot(dist)
+qqcomp(dist)
+ppcomp(dist)
+cdfcomp(dist)
+```
+
+**We can conclude that the Burr distribution is indeed the best theoritical distribution suitable for noise data analysis.** 
+
+
+
+### Exceedance and Return Period
+```{r}
+# Exceedance & Return Period calculation
+# 70dB as the benchmark
+exceedance =(1-0.26)* 600  # Y-axis value from CDF curve corresponding to the benchmark
+return_period = round(600/exceedance,2)
+tibble("Exceedance (seconds)"=exceedance, "Return Period (seconds)"=return_period)
+
+```
+
+**An exceedance of 444 seconds implies that the noise in the particuler area in that particuler time of the day exceeded the benchmark of 70 dBA for 444 seconds within 10 minutes time period. This means there is a violation of the benchmark noise limit at aproximately every 1.35 seconds.**
+
+```{r}
+output <- data.frame(matrix(, nrow=ncol(noise), ncol=7))
+
+noise1<- noise[seq(1, nrow(y), time_int), ]
+
+for (i in seq_along(noise1)) {
+  z = as.matrix(as.numeric(na.exclude(noise1[[i]]))) 
+  output[[1]][i] <- colnames(noise1)[i]
+  output[[2]][i] <- leq(z, class_int)%>% round(1)
+  output[[3]][i] <- quantile(z, .1)%>% round(1)
+  output[[4]][i] <- quantile(z, .5)%>% round(1)
+  output[[5]][i] <- quantile(z, .9)%>% round(1)
+  output[[6]][i] <- bootstrap(as.matrix(as.numeric(na.exclude(noise1[[i]]))), 1000, leq, class_int= class_int)$thetastar%>% quantile(.05)%>% round(1)
+  output[[7]][i] <- bootstrap(as.matrix(as.numeric(na.exclude(noise1[[i]]))), 1000, leq, class_int= class_int)$thetastar%>% quantile(.95)%>% round(1)
+}
+
+names(output)[1] <- "data"
+names(output)[2] <- "Leq"
+names(output)[3] <- "L90"
+names(output)[4] <- "L50"
+names(output)[5] <- "L10"
+names(output)[6] <- "lower_confidence_bound"
+names(output)[7] <- "upper_confidence_bound"
+
+output
+
+write.csv(output, "calculation_semi.csv")
+```
+
+```{r}
+calculation <- read_csv("calculation_semi.csv")
+calculation1 <- read_csv("calculation_1.csv")
+
+#str(calculation)
+
+calculation %>% 
+  filter(grepl('x02_', data))%>%
+  ggplot(aes(data, Leq, group = 1)) + 
+  geom_ribbon(aes(ymin = lower_confidence_bound,
+                  ymax = upper_confidence_bound),    # shadowing cnf intervals
+                  fill = "steelblue2",
+                  alpha= 0.5) + 
+  geom_line(color = "firebrick",
+            size = 1)+
+  geom_point(color= 'red')+
+  ylim(c(60,100))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+calculation1 %>% 
+  filter(day=='sun')%>%
+  ggplot(aes(location, Leq, fill = time, color=time, group=2)) + 
+  geom_ribbon(aes(ymin = lower_confidence_bound,
+                  ymax = upper_confidence_bound,
+                  group= time),
+              fill = "steelblue2") + 
+  geom_line(color = "firebrick", size = 1)+
+  geom_point(color= 'red')+
+  ylim(c(60,100))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+
