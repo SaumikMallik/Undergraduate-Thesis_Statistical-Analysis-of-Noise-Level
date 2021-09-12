@@ -1,1 +1,2 @@
-# Thesis
+These files contain the R codes that I wrote for my undergraduate thesis work entitled "Statistical Analysis of Noise Level along the High Court – Raju Vashkorjo Route of the Metro Rail Project". The aim of this study was to quantify the uncertainty of noise measurement procedure using bootstrapping and the predictability by fitting the observed data in a statistical distribution. The statistical analysis and data visualizations had been conducted in the R programming language.
+These codes encompass my whole journey from being a data science enthusiast to an experienced R coder.
